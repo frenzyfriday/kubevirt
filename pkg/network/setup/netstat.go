@@ -31,6 +31,7 @@ import (
 	netutils "k8s.io/utils/net"
 
 	v1 "kubevirt.io/api/core/v1"
+	"kubevirt.io/client-go/log"
 
 	"kubevirt.io/kubevirt/pkg/network/cache"
 	"kubevirt.io/kubevirt/pkg/network/deviceinfo"
@@ -361,6 +362,12 @@ func isGuestAgentIfaceOriginatedFromOldVirtLauncher(guestAgentInterface api.Inte
 }
 
 func updateVMIIfaceStatusWithGuestAgentData(ifaceStatus *v1.VirtualMachineInstanceNetworkInterface, guestAgentIface api.InterfaceStatus) {
+	// DEBUG: Log incoming guest agent data
+	log.Log.Infof("[DEBUG-NETSTAT] Processing GA data: name=%s mac=%s ip=%s ips=%v",
+		guestAgentIface.InterfaceName, guestAgentIface.Mac, guestAgentIface.Ip, guestAgentIface.IPs)
+	log.Log.Infof("[DEBUG-NETSTAT] Current ifaceStatus BEFORE GA: name=%s ip=%s ips=%v",
+		ifaceStatus.Name, ifaceStatus.IP, ifaceStatus.IPs)
+
 	ifaceStatus.InterfaceName = guestAgentIface.InterfaceName
 	// IP data from the Guest Agent overrides previous iface status information in the following cases:
 	// - No status IPs existed before, i.e. GA data is adding new information.
@@ -369,7 +376,15 @@ func updateVMIIfaceStatusWithGuestAgentData(ifaceStatus *v1.VirtualMachineInstan
 	// However, in case GA does not include IP data, it will clear IP status data (guest is not reachable by any IP).
 	ifaceStatusIPv4, ifaceStatusIPv6 := splitIPByFamiliy(ifaceStatus.IPs)
 	guestAgentIfaceIPv4, guestAgentIfaceIPv6 := splitIPByFamiliy(guestAgentIface.IPs)
+
+	// DEBUG: Log the decision point
+	log.Log.Infof("[DEBUG-NETSTAT] IPv4 check: len(status)=%d len(GA)=%d - OR condition=%v",
+		len(ifaceStatusIPv4), len(guestAgentIfaceIPv4),
+		len(ifaceStatusIPv4) == 0 || len(guestAgentIfaceIPv4) == 0)
+
 	if len(ifaceStatusIPv4) == 0 || len(guestAgentIfaceIPv4) == 0 {
+		log.Log.Infof("[DEBUG-NETSTAT] BUG TRIGGERED! Overwriting statusIPv4=%v with GAIPv4=%v",
+			ifaceStatusIPv4, guestAgentIfaceIPv4)
 		ifaceStatusIPv4 = guestAgentIfaceIPv4
 	}
 	if len(ifaceStatusIPv6) == 0 || len(guestAgentIfaceIPv6) == 0 {
@@ -386,6 +401,10 @@ func updateVMIIfaceStatusWithGuestAgentData(ifaceStatus *v1.VirtualMachineInstan
 	if len(ifaceStatus.IPs) > 0 {
 		ifaceStatus.IP = ifaceStatus.IPs[0]
 	}
+
+	// DEBUG: Log final result
+	log.Log.Infof("[DEBUG-NETSTAT] Final ifaceStatus AFTER GA: name=%s ip=%s ips=%v",
+		ifaceStatus.Name, ifaceStatus.IP, ifaceStatus.IPs)
 }
 
 func filterOutLinkLocalAddresses(ipv6Addresses []string) []string {

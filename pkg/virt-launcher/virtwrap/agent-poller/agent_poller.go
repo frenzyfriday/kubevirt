@@ -87,6 +87,16 @@ func (s *AsyncAgentStore) Store(key, value any) {
 			domainInfo.FSFreezeStatus = s.GetFSFreezeStatus()
 		}
 
+		// DEBUG: Log what's being sent in AgentUpdatedEvent
+		log.Log.Infof("[DEBUG-STORE] AgentUpdatedEvent triggered by key=%v", key)
+		if domainInfo.Interfaces != nil {
+			for _, iface := range domainInfo.Interfaces {
+				log.Log.Infof("[DEBUG-STORE] Sending interface: name=%s mac=%s ip=%s ips=%v", iface.InterfaceName, iface.Mac, iface.Ip, iface.IPs)
+			}
+		} else {
+			log.Log.Infof("[DEBUG-STORE] Sending nil interfaces!")
+		}
+
 		s.AgentUpdated <- AgentUpdatedEvent{
 			DomainInfo: domainInfo,
 		}
@@ -426,7 +436,26 @@ func fetchAndStoreGuestInfo(infoTypes libvirt.DomainGuestInfoTypes, agentPoller 
 	}
 
 	if infoTypes&libvirt.DOMAIN_GUEST_INFO_INTERFACES != 0 {
-		agentPoller.agentStore.Store(libvirt.DOMAIN_GUEST_INFO_INTERFACES, convertToInterfaces(guestInfo))
+		// DEBUG: Log raw interface data from guest agent
+		if guestInfo.Interfaces != nil {
+			for _, iface := range guestInfo.Interfaces {
+				log.Log.Infof("[DEBUG-GA-RAW] Interface: name=%s hwaddr=%s addrs=%d", iface.Name, iface.Hwaddr, len(iface.Addrs))
+				for i, addr := range iface.Addrs {
+					log.Log.Infof("[DEBUG-GA-RAW]   addr[%d]: type=%s addr=%s", i, addr.Type, addr.Addr)
+				}
+			}
+		} else {
+			log.Log.Infof("[DEBUG-GA-RAW] guestInfo.Interfaces is nil!")
+		}
+
+		interfaces := convertToInterfaces(guestInfo)
+
+		// DEBUG: Log converted interface data before storing
+		for _, iface := range interfaces {
+			log.Log.Infof("[DEBUG-GA-CONVERTED] Interface: name=%s mac=%s ip=%s ips=%v", iface.InterfaceName, iface.Mac, iface.Ip, iface.IPs)
+		}
+
+		agentPoller.agentStore.Store(libvirt.DOMAIN_GUEST_INFO_INTERFACES, interfaces)
 	}
 
 	if infoTypes&libvirt.DOMAIN_GUEST_INFO_OS != 0 {
